@@ -1,0 +1,91 @@
+{
+  // Oh My OpenCode — Project Configuration
+  // Spring Boot Monorepo with RabbitMQ + AI Agent Workflow
+
+  // ── Agent Overrides ──
+  "agents": {
+    // Custom Tracer: Explore variant specialized for dependency tracing
+    "tracer": {
+      "extends": "explore",
+      "config": ".opencode/agents/tracer.jsonc"
+    },
+    // Custom Reviewer: Oracle variant with project-specific review checklist
+    "reviewer": {
+      "extends": "oracle",
+      "config": ".opencode/agents/reviewer.jsonc"
+    }
+  },
+
+  // ── Model Routing ──
+  "models": {
+    "orchestrator": "claude-opus-4-6",
+    "explore": "gemini-3.1",
+    "oracle": "codex-5.3",
+    "librarian": "gemini-3.1",
+    "coder": "claude-opus-4-6",
+    "document-writer": "gemini-3.1",
+    "tracer": "claude-opus-4-6",
+    "reviewer": "codex-5.3"
+  },
+
+  // ── Parallel Execution ──
+  "ultrawork": {
+    "maxParallel": 3,
+    "defaultAgent": "explore"
+  },
+
+  // ── Plugin Integration ──
+  "plugins": {
+    "planning-with-files": {
+      "enabled": true,
+      "taskDir": "memory-bank/tasks",
+      "currentTaskFile": ".current-task"
+    }
+  },
+
+  // ── MCP Servers ──
+  "mcp": {
+    "context7": {
+      "enabled": true,
+      "description": "Library documentation lookup"
+    },
+    "web-search": {
+      "enabled": true,
+      "description": "External research"
+    }
+  },
+
+  // ── Project Context ──
+  "context": {
+    "description": "Spring Boot multi-module monorepo (~30+ modules) with RabbitMQ inter-module messaging",
+    "memoryBank": "memory-bank/",
+    "indexFiles": [
+      "memory-bank/indexes/modules.md",
+      "memory-bank/indexes/routing-keys.md"
+    ],
+    "workflowConfig": "memory-bank/config/workflow-phases.md"
+  },
+
+  // ── Custom Hooks (supplement planning-with-files) ──
+  "hooks": {
+    "onSessionStart": [
+      "Read memory-bank/reviews/{agent-name}.md if it exists. Apply feedback as constraints.",
+      "Read the current task's progress.md (latest entry) for cold-start resumption.",
+      "Read the current task's task_plan.md. Announce current phase."
+    ],
+    "onBeforeEdit": [
+      "Identify which module this file belongs to.",
+      "If the module's section in indexes/modules.md has not been read this session, read it now (section only, not full file).",
+      "If the task involves RabbitMQ for this module, read the relevant exchange section from indexes/routing-keys.md."
+    ],
+    "onAfterEdit": [
+      "Log the action to the current task's progress.md.",
+      "If you discovered new module information, update indexes immediately."
+    ],
+    "onBeforeStop": [
+      "Check task_plan.md — are ALL phases marked [x]?",
+      "If any phase is incomplete, list them and continue working.",
+      "If all complete: write session summary, update indexes, write reviews."
+    ]
+  }
+}

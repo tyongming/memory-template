@@ -1,0 +1,71 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "TASK=$(cat .current-task 2>/dev/null); if [ -n \"$TASK\" ]; then PROGRESS=$(tail -20 memory-bank/tasks/$TASK/progress.md 2>/dev/null | tr '\\n' ' ' | sed 's/\"/\\\\\"/g'); PLAN=$(head -40 memory-bank/tasks/$TASK/task_plan.md 2>/dev/null | tr '\\n' ' ' | sed 's/\"/\\\\\"/g'); REVIEW=$(tail -10 memory-bank/reviews/main-agent.md 2>/dev/null | tr '\\n' ' ' | sed 's/\"/\\\\\"/g'); echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Active task: '\"$TASK\"'  | Plan: '\"$PLAN\"'  | Recent progress: '\"$PROGRESS\"'  | Review: '\"$REVIEW\"'\"}}'; else TASKS=$(grep -i 'in.progress' memory-bank/tasks/INDEX.md 2>/dev/null | head -3 | tr '\\n' ' ' | sed 's/\"/\\\\\"/g'); if [ -n \"$TASKS\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"No .current-task file but found in-progress tasks in INDEX.md: '\"$TASKS\"' -- Ask user which to resume.\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"No active task. Use /ingest-task to create one.\"}}'; fi; fi"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[Learning Check] If this interaction revealed a correction, knowledge gap, unexpected behavior, or reusable pattern \u2014 log it to .learnings/ before moving on.\"}}'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "TASK=$(cat .current-task 2>/dev/null); if [ -n \"$TASK\" ] && [ -f \"memory-bank/tasks/$TASK/task_plan.md\" ]; then PLAN=$(head -30 memory-bank/tasks/$TASK/task_plan.md 2>/dev/null | tr '\\n' ' ' | sed 's/\"/\\\\\"/g'); echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"additionalContext\\\":\\\"Current plan: $PLAN\\\"}}\"; fi; exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); EXIT_CODE=$(echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); r=d.get('tool_response',{}); print(r.get('exitCode','0') if isinstance(r,dict) else '0')\" 2>/dev/null); if [ \"$EXIT_CODE\" != \"0\" ] && [ \"$EXIT_CODE\" != \"None\" ]; then CMD=$(echo \"$INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command','unknown'))\" 2>/dev/null); mkdir -p .learnings; TIMESTAMP=$(date +%Y-%m-%d\\ %H:%M); SHORTCMD=$(echo \"$CMD\" | head -c 80); EXISTING=$(grep -c \"$SHORTCMD\" .learnings/ERRORS.md 2>/dev/null || echo 0); if [ \"$EXISTING\" -gt 0 ]; then COUNT=$((EXISTING + 1)); echo \"- $TIMESTAMP \u2014 Command failed (${COUNT}x): \\`$SHORTCMD\\` (exit $EXIT_CODE) \u2014 SEE ALSO: previous entries above\" >> .learnings/ERRORS.md; if [ \"$COUNT\" -ge 3 ]; then echo \"- $TIMESTAMP \u2014 **PROMOTE**: \\`$SHORTCMD\\` has failed ${COUNT}x. Add to CLAUDE.md Known Issues.\" >> .learnings/ERRORS.md; fi; else echo \"- $TIMESTAMP \u2014 Command failed: \\`$SHORTCMD\\` (exit $EXIT_CODE)\" >> .learnings/ERRORS.md; fi; fi; exit 0"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "!!!IMPORTANT!!! Respond with ONLY a JSON object. No other text.\nFormat:  {\"decision\": \"approve\" or \"block\", \"reason\": \"[list anything missing, or OK]\"}\n\nTwo checks:\n1. Was progress.md updated this session with task progress?\n2. If agents were delegated, was their performance logged to reviews/?",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(ast-grep:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir:*)"
+    ]
+  }
+}
